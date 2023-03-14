@@ -355,9 +355,7 @@ void MapFieldGenerator::GenerateArenaDestructorCode(
 }
 
 ArenaDtorNeeds MapFieldGenerator::NeedsArenaDestructor() const {
-  return HasDescriptorMethods(descriptor_->file(), options_)
-             ? ArenaDtorNeeds::kRequired
-             : ArenaDtorNeeds::kNone;
+  return ArenaDtorNeeds::kNone;
 }
 }  // namespace
 
