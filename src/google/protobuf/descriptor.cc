@@ -3154,9 +3154,27 @@ void Descriptor::DebugString(int depth, std::string* contents,
   }
 
   for (int i = 0; i < extension_range_count(); i++) {
-    absl::SubstituteAndAppend(contents, "$0  extensions $1 to $2;\n", prefix,
-                              extension_range(i)->start,
-                              extension_range(i)->end - 1);
+    absl::SubstituteAndAppend(contents, "$0  extensions $1", prefix,
+                              extension_range(i)->start);
+    if (extension_range(i)->end > extension_range(i)->start + 1) {
+      absl::SubstituteAndAppend(contents, " to $0",
+                                extension_range(i)->end - 1);
+    }
+    if (extension_range(i)->options_ != nullptr) {
+      if (extension_range(i)->options_->has_metadata()) {
+        absl::SubstituteAndAppend(
+            contents, " [ metadata = { $0 } ]",
+            extension_range(i)->options_->metadata().ShortDebugString());
+      } else if (extension_range(i)->options_->declaration_size() > 0) {
+        absl::StrAppend(contents, " [");
+        for (auto& decl : extension_range(i)->options_->declaration()) {
+          absl::SubstituteAndAppend(contents, " declaration = { $0 }",
+                                    decl.ShortDebugString());
+        }
+        absl::StrAppend(contents, " ] ");
+      }
+    }
+    absl::StrAppend(contents, ";\n");
   }
 
   // Group extensions by what they extend, so they can be printed out together.
@@ -7130,6 +7148,26 @@ void DescriptorBuilder::ValidateFieldOptions(
              "option json_name is not allowed on extension fields.");
   }
 
+
+    if (extension_range->options_ == nullptr) {
+      return;
+    }
+
+    for (const auto& declaration : extension_range->options_->declaration()) {
+      if (declaration.number() != field->number()) continue;
+      CheckExtensionDeclaration(*field, proto, declaration.full_name(),
+                                declaration.type(), declaration.is_repeated());
+      return;
+    }
+
+    if (extension_range->options_->has_metadata()) {
+      ABSL_DCHECK(extension_range->options_->declaration().empty());
+      const auto& metadata = extension_range->options_->metadata();
+      CheckExtensionDeclaration(*field, proto, metadata.full_name(),
+                                metadata.type(), metadata.is_repeated());
+    }
+  }
+
 }
 
 void DescriptorBuilder::ValidateEnumOptions(EnumDescriptor* enm,
