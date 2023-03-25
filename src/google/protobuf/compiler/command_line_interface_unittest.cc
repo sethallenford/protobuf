@@ -1631,6 +1631,52 @@ TEST_F(CommandLineInterfaceTest, WriteDescriptorSetWithSourceInfo) {
   EXPECT_TRUE(descriptor_set.file(0).has_source_code_info());
 }
 
+// Returns true if x is a prefix of y.
+bool IsPrefix(absl::Span<const int> x, absl::Span<const int> y) {
+  return x.size() <= y.size() && x == y.subspan(0, x.size());
+}
+
+TEST_F(CommandLineInterfaceTest, SourceInfoOptionRetention) {
+  CreateTempFile("foo.proto",
+                 "syntax = \"proto2\";\n"
+                 "message Foo {\n"
+                 "  extensions 1000 to max [\n"
+                 "    declaration = {\n"
+                 "      number: 1000\n"
+                 "      full_name: \".video.cat_video\"\n"
+                 "      type: \".video.CatVideo\"\n"
+                 "  }];\n"
+                 "}\n");
+
+  Run("protocol_compiler --descriptor_set_out=$tmpdir/descriptor_set "
+      "--include_source_info --proto_path=$tmpdir foo.proto");
+
+  ExpectNoErrors();
+
+  FileDescriptorSet descriptor_set;
+  ReadDescriptorSet("descriptor_set", &descriptor_set);
+  if (HasFatalFailure()) return;
+  ASSERT_EQ(descriptor_set.file_size(), 1);
+  EXPECT_EQ(descriptor_set.file(0).name(), "foo.proto");
+
+  // Everything starting with this path should be have been stripped from the
+  // source code info.
+  const int declaration_option_path[] = {
+      FileDescriptorProto::kMessageTypeFieldNumber,
+      0,
+      DescriptorProto::kExtensionRangeFieldNumber,
+      0,
+      DescriptorProto::ExtensionRange::kOptionsFieldNumber,
+      ExtensionRangeOptions::kDeclarationFieldNumber};
+
+  const SourceCodeInfo& source_code_info =
+      descriptor_set.file(0).source_code_info();
+  EXPECT_TRUE(source_code_info.location_size() > 0);
+  for (const SourceCodeInfo::Location& location : source_code_info.location()) {
+    EXPECT_FALSE(IsPrefix(declaration_option_path, location.path()));
+  }
+}
+
 TEST_F(CommandLineInterfaceTest, WriteTransitiveDescriptorSet) {
   CreateTempFile("foo.proto",
                  "syntax = \"proto2\";\n"
